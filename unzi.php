@@ -16,104 +16,120 @@ $deleteFileAfter = false;
 
 $enabledStuff = array ();
 $enabledStuff['exec'] =
-  false === strpos(ini_get("disable_functions"), "exec");
+    false === strpos(ini_get("disable_functions"), "exec");
 $enabledStuff['zip'] = class_exists('ZipArchive', false);
 $enabledStuff['targz'] = false;
 
 if ($enabledStuff['exec']) {
-  $command = "tar --version";
-  $lastLine = exec($command, $output);
-  if ($output) {
-    $enabledStuff['targz'] = true;
-  }
+    $command = "tar --version";
+    $lastLine = exec($command, $output);
+    if ($output) {
+        $enabledStuff['targz'] = true;
+    }
 }
 
- 
+$showHtml = true;
+if (getenv('REQUEST_METHOD') === 'POST') {
+    if (
+        false !== strpos(getenv('CONTENT_TYPE'), 'javascript') ||
+        false !== strpos(getenv('CONTENT_TYPE'), 'json')
+    ) {
+        $post = json_decode(file_get_contents('php://input'));
+    } else {
+        $post = $_POST;
+    }
 
-if (!empty($_POST['upload'])) {
-    $doExtract = true;
-    $deleteFileAfter = true;
-    $filename = $_FILES['file']['tmp_name'];
-}
-else if (!empty($_POST['fromLocal'])) {
-    $filename = $_POST['filename'];
-    if (file_exists($filename)) {;
+    if (!empty($post['fileBase64'])) {
         $doExtract = true;
+        $deleteFileAfter = true;
+        $filename = tempnam(sys_get_temp_dir(), 'unzi');
+        file_put_contents($filename, base64_decode($post['fileBase64']));
+    }
+    if (!empty($post['upload'])) {
+        $doExtract = true;
+        $deleteFileAfter = true;
+        $filename = $_FILES['file']['tmp_name'];
+    }
+    else if (!empty($post['fromLocal'])) {
+        $filename = $post['filename'];
+        if (file_exists($filename)) {;
+        $doExtract = true;
+        }
     }
 }
 if ($doExtract) {
-  $typeFound = false;
+    $typeFound = false;
     if (file_exists($filename)) {
-    try {
-      if ($enabledStuff['zip']) {
-        $zip = new ZipArchive;
-        $res = $zip->open($filename);
-        if (true === $res) {
-          $success = $zip->extractTo($dest);
-          $writeSuccess = $success;
-          $chmodFiles = filter_input(INPUT_POST, 'chmodFiles');
-          $chmodDirs = filter_input(INPUT_POST, 'chmodDirs');
-          if (($chmodFiles or $chmodDirs)) {
-            $fileList = array ();
-            for ($i = 0; $i < $zip->numFiles; $i++) {
-              $stat = $zip->statIndex( $i );
-              $name = $stat['name'];
-              $fileList[] = $name;
+        try {
+            if ($enabledStuff['zip']) {
+                $zip = new ZipArchive;
+                $res = $zip->open($filename);
+                if (true === $res) {
+                    $success = $zip->extractTo($dest);
+                    $writeSuccess = $success;
+                    $chmodFiles = filter_input(INPUT_POST, 'chmodFiles');
+                    $chmodDirs = filter_input(INPUT_POST, 'chmodDirs');
+                    if (($chmodFiles or $chmodDirs)) {
+                        $fileList = array ();
+                        for ($i = 0; $i < $zip->numFiles; $i++) {
+                            $stat = $zip->statIndex( $i );
+                            $name = $stat['name'];
+                            $fileList[] = $name;
+                        }
+                        foreach ($fileList as $file) {
+                            $file = "$dest/$file";
+                            if (is_file($file) and $chmodFiles) {
+                                chmod($file, intval($chmodFiles, 8));
+                            }
+                            else if (is_dir($file) and $chmodDirs) {
+                                chmod($file, intval($chmodDirs, 8));
+                            }
+                        }          
+                    }
+                    if ($deleteFileAfter) {
+                        unlink($filename);
+                    }
+                    $zip->close();
+                    $typeFound = true;
+                }
+                else if (ZIPARCHIVE::ER_NOZIP == $res) {
+
+                }
+                else {
+                    trigger_error("ZipArchive error: $res.");        
+                }
             }
-            foreach ($fileList as $file) {
-              $file = "$dest/$file";
-              if (is_file($file) and $chmodFiles) {
-                chmod($file, intval($chmodFiles, 8));
-              }
-              else if (is_dir($file) and $chmodDirs) {
-                chmod($file, intval($chmodDirs, 8));
-              }
-            }          
-          }
-          if ($deleteFileAfter) {
-            unlink($filename);
-          }
-          $zip->close();
-          $typeFound = true;
         }
-        else if (ZIPARCHIVE::ER_NOZIP == $res) {
+        catch (Exception $e) {
 
         }
-        else {
-          trigger_error("ZipArchive error: $res.");        
-        }
-      }
-    }
-    catch (Exception $e) {
-
-    }
-    if (!$typeFound) {
-      $command = "tar -xzvf \"$filename\" -C \"$dest\"";
-      $success = exec(escapeshellcmd($command), $exec, $retVar);
-      if ($success && 0 === $retVar) {
-        $writeSuccess = true;
-          $chmodFiles = filter_input(INPUT_POST, 'chmodFiles');
-          $chmodDirs = filter_input(INPUT_POST, 'chmodDirs');
-          if (($chmodFiles or $chmodDirs)) {
-            $fileList = explode("\n", $command);
-            foreach ($fileList as $file) {
-              if (is_file($file) and $chmodFiles) {
-                exec("chmod $chmodFiles $file");
-              }
-              else if ($chmodDirs) {
-                exec("chmod $chmodDirs $file");
-              }
+        if (!$typeFound) {
+            $command = "tar -xzvf \"$filename\" -C \"$dest\"";
+            $success = exec(escapeshellcmd($command), $exec, $retVar);
+            if ($success && 0 === $retVar) {
+                $writeSuccess = true;
+                $chmodFiles = filter_input(INPUT_POST, 'chmodFiles');
+                $chmodDirs = filter_input(INPUT_POST, 'chmodDirs');
+                if (($chmodFiles or $chmodDirs)) {
+                    $fileList = explode("\n", $command);
+                    foreach ($fileList as $file) {
+                        if (is_file($file) and $chmodFiles) {
+                            exec("chmod $chmodFiles $file");
+                        }
+                        else if ($chmodDirs) {
+                            exec("chmod $chmodDirs $file");
+                        }
+                    }
+                }
+                if ($deleteFileAfter) {
+                    unlink($filename);
+                }
             }
-          }
-          if ($deleteFileAfter) {
-            unlink($filename);
-          }
-      }
-      else {
+            else {
                 trigger_error("Couldn't uncompress the tar.gz.");
             }
 
-    }
+        }
     }
 }
 $tgzFiles = array();
@@ -131,13 +147,28 @@ foreach ($files as $file) {
         }
     }
 }
+if (!empty($post['accept'])) {
+    if ('json' == $post['accept']) {
+        $arr = array();
+        $arr['version'] = '1.1.0';
+        $arr['success'] = $writeSuccess;
+        $arr['data'] = array();
+        if ($exec) {
+            $arr['data']['command'] = join("\n", $exec);
+            $arr['data']['result'] = join("\n", $exec);
+        }
+        header('Content-Type: application/json');
+        echo json_encode($exec);
+        exit;
+    }
+}
 ?>
 <!doctype html>
 <html>
   <head>
   <meta charset="utf-8">
   <meta name="author" content="Attila Szeremi">
-  <title>Zip extractor 1.0</title>
+  <title>Zip extractor 1.1.0</title>
   </head>
   <body>
   <?php if ($writeSuccess): ?>
