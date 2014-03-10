@@ -1,7 +1,7 @@
 {
     "name": "amcsi/unziphp",
     "description": "A deployment tool in PHP for environments where no (S)FTP is available with the help of deploying a PHP file that accepts archives by HTTP POST requests.",
-    "keywords": ["deploy", "archive", "git"],
+    "keywords": ["deploy", "archive", "git", "cli"],
     "homepage": "https://github.com/amcsi/amysql",
     "license": "MIT",
     "authors": [
@@ -18,7 +18,7 @@
         "source": "https://github.com/amcsi/unzi"
     },
     "require": {
-        "php": ">=5.1.0",
+        "php": ">=5.2.0",
         "alchemy/zippy": "0.1.*"
     },
     "autoload": {
