@@ -7,12 +7,12 @@ class Model
 {
     public function tgzFiles(array $files, $target = null)
     {
+        $zippy = Zippy::load();
         if (!$target || ($dirDoesntExist = !is_dir(dirname($target)))) {
             if (!empty($dirDoesntExist)) {
                 trigger_error("Target directory doesn't exist. Using temporary file.");
             }
             $filename = tempnam($this->getTgzTmpDir(), 'unzi');
-            var_dump('lol', $target);
         } else if (is_dir($target)) {
             $filename = tempnam($target, 'unzi');
         } else if (is_dir(dirname($target))) {
@@ -22,23 +22,17 @@ class Model
         if (file_exists($filename)) {
             unlink($filename);
         }
-        if ('.tar.gz' == substr($filename, -7)) {
-            $filename = substr($filename, 0, -3);
-            if (file_exists($filename)) {
-                unlink($filename);
-            }
-        }
-        $pharData = new \PharData($filename);
-        $files = $this->filterFilesForTar($files);
-        foreach ($files as $file) {
-            if (!is_dir($file)) {
-                $pharData->addFile($file);
-            }
-        }
-        $gzPhar = $pharData->compress(\Phar::GZ);
-        $pharData = null;
+
+        $zippy->create($filename, $files, false, 'tar.gz');
 
         return $filename;
+    }
+
+    public function listTgz($filename)
+    {
+        $zippy = Zippy::load();
+        $archive = $zippy->open($filename);
+        $fileArray = $archive->getMembers();
     }
 
     public function tgzFilesToTemp(array $files)
